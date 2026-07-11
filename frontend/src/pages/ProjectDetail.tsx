@@ -3,12 +3,15 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   CalendarDays,
+  Check,
   CheckCircle2,
   Circle,
   Loader2,
   Plus,
   Sparkles,
   Trash2,
+  Wand2,
+  X,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,14 +23,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
+  useAcceptTasks,
   useCreateTask,
   useDeleteTask,
+  useGenerateTasks,
   usePrioritize,
   useProject,
   useTasks,
   useUpdateTask,
 } from "@/hooks/use-api";
-import type { PrioritizationResponse, Task } from "@/types";
+import type { GenerateTasksResponse, PrioritizationResponse, Task } from "@/types";
 
 const taskSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
@@ -62,6 +67,8 @@ export function ProjectDetail() {
   const navigate = useNavigate();
   const [showAddTask, setShowAddTask] = useState(false);
   const [prioritization, setPrioritization] = useState<PrioritizationResponse | null>(null);
+  const [suggestions, setSuggestions] = useState<GenerateTasksResponse | null>(null);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
 
   const { data: project, isLoading: projectLoading } = useProject(projectId!);
   const { data: tasksData, isLoading: tasksLoading } = useTasks(projectId!);
@@ -69,6 +76,8 @@ export function ProjectDetail() {
   const updateTask = useUpdateTask(projectId!);
   const deleteTask = useDeleteTask(projectId!);
   const prioritize = usePrioritize(projectId!);
+  const generateTasks = useGenerateTasks(projectId!);
+  const acceptTasks = useAcceptTasks(projectId!);
 
   const form = useForm<TaskForm>({
     resolver: zodResolver(taskSchema),
@@ -94,6 +103,31 @@ export function ProjectDetail() {
   const handlePrioritize = async () => {
     const result = await prioritize.mutateAsync();
     setPrioritization(result);
+  };
+
+  const handleGenerate = async () => {
+    const result = await generateTasks.mutateAsync();
+    setSuggestions(result);
+    setSelectedSuggestions(new Set(result.suggestions.map((_, i) => i)));
+  };
+
+  const toggleSuggestion = (index: number) => {
+    setSelectedSuggestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
+  const handleAcceptSuggestions = async () => {
+    if (!suggestions) return;
+    const selected = suggestions.suggestions.filter((_, i) =>
+      selectedSuggestions.has(i)
+    );
+    await acceptTasks.mutateAsync(selected);
+    setSuggestions(null);
+    setSelectedSuggestions(new Set());
   };
 
   if (projectLoading) {
@@ -139,6 +173,18 @@ export function ProjectDetail() {
               Add Task
             </Button>
             <Button
+              variant="outline"
+              onClick={handleGenerate}
+              disabled={generateTasks.isPending}
+            >
+              {generateTasks.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              Generate Tasks
+            </Button>
+            <Button
               onClick={handlePrioritize}
               disabled={prioritize.isPending || activeTasks.length === 0}
             >
@@ -164,6 +210,85 @@ export function ProjectDetail() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">{prioritization.summary}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Generated Task Suggestions */}
+      {suggestions && (
+        <Card className="border-emerald-500/20 bg-emerald-500/5">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Wand2 className="h-4 w-4 text-emerald-500" />
+                Suggested Tasks
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSuggestions(null)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Dismiss
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleAcceptSuggestions}
+                  disabled={selectedSuggestions.size === 0 || acceptTasks.isPending}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  {acceptTasks.isPending
+                    ? "Creating..."
+                    : `Accept ${selectedSuggestions.size} tasks`}
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {suggestions.strategy}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {suggestions.suggestions.map((s, i) => (
+              <div
+                key={i}
+                className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  selectedSuggestions.has(i)
+                    ? "border-emerald-500/40 bg-emerald-500/10"
+                    : "border-border/50 opacity-60"
+                }`}
+                onClick={() => toggleSuggestion(i)}
+              >
+                <div
+                  className={`mt-0.5 h-4 w-4 rounded border shrink-0 flex items-center justify-center ${
+                    selectedSuggestions.has(i)
+                      ? "bg-emerald-500 border-emerald-500"
+                      : "border-muted-foreground/40"
+                  }`}
+                >
+                  {selectedSuggestions.has(i) && (
+                    <Check className="h-3 w-3 text-white" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{s.title}</span>
+                    {s.deadline && (
+                      <span className="text-xs text-muted-foreground">
+                        <CalendarDays className="inline h-3 w-3 mr-0.5" />
+                        {s.deadline}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {s.description}
+                  </p>
+                  <p className="text-xs text-emerald-400/80 mt-1 italic">
+                    {s.reason}
+                  </p>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

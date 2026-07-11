@@ -1,8 +1,9 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { prioritizeApi, projectsApi, tasksApi } from "@/lib/api";
+import { prioritizeApi, projectsApi, tasksApi, generateApi } from "@/lib/api";
 import type {
   ProjectCreate,
   ProjectUpdate,
+  SuggestedTask,
   TaskCreate,
   TaskUpdate,
 } from "@/types";
@@ -105,5 +106,22 @@ export function useAllTasks(projectIds: string[]) {
       queryFn: () => tasksApi.list(id),
       enabled: !!id,
     })),
+  });
+}
+
+// --- Task Generation ---
+
+export function useGenerateTasks(projectId: string) {
+  return useMutation({
+    mutationFn: () => generateApi.generate(projectId),
+  });
+}
+
+export function useAcceptTasks(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tasks: SuggestedTask[]) =>
+      generateApi.accept(projectId, tasks),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
   });
 }

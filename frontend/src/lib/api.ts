@@ -4,6 +4,8 @@ import type {
   ProjectListResponse,
   ProjectUpdate,
   PrioritizationResponse,
+  GenerateTasksResponse,
+  SuggestedTask,
   Task,
   TaskCreate,
   TaskListResponse,
@@ -72,5 +74,19 @@ export const prioritizeApi = {
   run: (projectId: string) =>
     request<PrioritizationResponse>(`/api/projects/${projectId}/prioritize`, {
       method: "POST",
+    }),
+};
+
+// Task Generation
+export const generateApi = {
+  generate: (projectId: string) =>
+    request<GenerateTasksResponse>(
+      `/api/projects/${projectId}/generate-tasks`,
+      { method: "POST" }
+    ),
+  accept: (projectId: string, tasks: SuggestedTask[]) =>
+    request<TaskListResponse>(`/api/projects/${projectId}/accept-tasks`, {
+      method: "POST",
+      body: JSON.stringify({ tasks }),
     }),
 };

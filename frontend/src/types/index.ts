@@ -61,3 +61,19 @@ export type TaskCreate = Pick<Task, "title"> &
   Partial<Pick<Task, "description" | "deadline" | "status">>;
 
 export type TaskUpdate = Partial<Pick<Task, "title" | "description" | "deadline" | "status">>;
+
+// Generate Tasks
+export interface SuggestedTask {
+  title: string;
+  description: string;
+  deadline: string | null;
+  reason: string;
+  order: number;
+}
+
+export interface GenerateTasksResponse {
+  projectId: string;
+  suggestions: SuggestedTask[];
+  strategy: string;
+  generatedAt: string;
+}
