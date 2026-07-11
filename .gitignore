@@ -29,3 +29,5 @@ terraform.tfvars
 
 # Testing
 .pytest_cache/backend/momentum_backend.egg-info/
+backend/package/
+backend/lambda.zip
