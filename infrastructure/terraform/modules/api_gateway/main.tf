@@ -4,7 +4,7 @@ resource "aws_apigatewayv2_api" "http" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_origins = var.environment == "prod" ? ["https://momentum.app"] : ["http://localhost:5173", "http://localhost:3000"]
+    allow_origins = var.environment == "prod" ? ["https://momentum.app"] : ["http://localhost:5173", "http://localhost:3000", "https://dev.d2kyovkps8f1nm.amplifyapp.com"]
     allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     allow_headers = ["Content-Type", "Authorization", "X-Request-Id"]
     max_age       = 3600
