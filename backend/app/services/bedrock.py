@@ -11,7 +11,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-@lru_cache()
+@lru_cache
 def get_bedrock_client():
     """Get cached Bedrock runtime client."""
     return boto3.client("bedrock-runtime", region_name=settings.aws_region)
@@ -78,9 +78,7 @@ def invoke_model(prompt: str, system_prompt: str) -> dict:
                 status_code=400, detail="Invalid request to AI service."
             )
         else:
-            raise HTTPException(
-                status_code=502, detail="AI service unavailable."
-            )
+            raise HTTPException(status_code=502, detail="AI service unavailable.")
 
     except (json.JSONDecodeError, KeyError, IndexError) as e:
         logger.error(f"Failed to parse Bedrock response: {e}")

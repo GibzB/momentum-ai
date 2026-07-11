@@ -1,13 +1,12 @@
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 
 from app.models.project import get_project
 from app.models.task import list_tasks
-from app.services.bedrock import invoke_model
 from app.schemas.prioritization import PrioritizationResponse, PrioritizedTask
+from app.services.bedrock import invoke_model
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ Do NOT include any text outside the JSON object.
 
 def build_context_prompt(project: dict, tasks: list[dict]) -> str:
     """Build the user prompt with full project context."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
 
     # Separate active vs completed tasks for context
     active_tasks = [t for t in tasks if t.get("status") != "completed"]
@@ -78,16 +77,17 @@ COMPLETED TASKS ({len(completed_tasks)}):
 """
 
     for t in completed_tasks:
-        prompt += f'- [{t["taskId"][:8]}] "{t["title"]}" (completed {t.get("completedAt", "unknown")})\n'
+        completed_at = t.get("completedAt", "unknown")
+        prompt += f'- [{t["taskId"][:8]}] "{t["title"]}" (completed {completed_at})\n'
 
     prompt += f"\nACTIVE TASKS TO PRIORITIZE ({len(active_tasks)}):\n"
 
     for t in active_tasks:
         prompt += f'- taskId: "{t["taskId"]}"\n'
         prompt += f'  title: "{t["title"]}"\n'
-        prompt += f'  status: {t.get("status", "pending")}\n'
-        prompt += f'  description: {t.get("description", "None")}\n'
-        prompt += f'  deadline: {t.get("deadline", "No deadline")}\n\n'
+        prompt += f"  status: {t.get('status', 'pending')}\n"
+        prompt += f"  description: {t.get('description', 'None')}\n"
+        prompt += f"  deadline: {t.get('deadline', 'No deadline')}\n\n"
 
     if not active_tasks:
         prompt += "(No active tasks to prioritize)\n"
@@ -137,5 +137,5 @@ def prioritize_project(project_id: str) -> PrioritizationResponse:
         projectId=project_id,
         recommendations=recommendations,
         summary=summary,
-        generatedAt=datetime.now(timezone.utc).isoformat(),
+        generatedAt=datetime.now(UTC).isoformat(),
     )

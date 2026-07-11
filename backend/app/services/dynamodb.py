@@ -1,10 +1,11 @@
-import boto3
 from functools import lru_cache
+
+import boto3
 
 from app.core.config import settings
 
 
-@lru_cache()
+@lru_cache
 def get_dynamodb_resource():
     """Get cached DynamoDB resource. Singleton per Lambda container."""
     return boto3.resource("dynamodb", region_name=settings.aws_region)

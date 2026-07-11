@@ -10,7 +10,6 @@ from moto import mock_aws
 
 from app.core.config import settings
 
-
 MOCK_BEDROCK_RESPONSE = {
     "recommendations": [
         {
@@ -18,8 +17,10 @@ MOCK_BEDROCK_RESPONSE = {
             "title": "Design database schema",
             "priorityScore": 95,
             "quadrant": "urgent-important",
-            "reason": "This is a foundational task that blocks all other development work.",
-            "nextAction": "Draft the DynamoDB table schemas in the architecture doc.",
+            "reason": (
+                "This is a foundational task that blocks all other development work."
+            ),
+            "nextAction": ("Draft the DynamoDB table schemas in the architecture doc."),
             "dependencies": [],
             "confidence": 0.92,
         },
@@ -28,13 +29,17 @@ MOCK_BEDROCK_RESPONSE = {
             "title": "Write API endpoints",
             "priorityScore": 78,
             "quadrant": "not-urgent-important",
-            "reason": "Needed for frontend integration but depends on schema design.",
-            "nextAction": "Start with the project CRUD endpoints once schema is finalized.",
+            "reason": ("Needed for frontend integration but depends on schema design."),
+            "nextAction": (
+                "Start with the project CRUD endpoints once schema is finalized."
+            ),
             "dependencies": ["TASK_ID_PLACEHOLDER"],
             "confidence": 0.85,
         },
     ],
-    "summary": "Database schema should be completed first as it unblocks API development.",
+    "summary": (
+        "Database schema should be completed first as it unblocks API development."
+    ),
 }
 
 
@@ -55,9 +60,7 @@ def dynamodb_tables(aws_env):
         dynamodb.create_table(
             TableName=settings.dynamodb_table_projects,
             KeySchema=[{"AttributeName": "projectId", "KeyType": "HASH"}],
-            AttributeDefinitions=[
-                {"AttributeName": "projectId", "AttributeType": "S"}
-            ],
+            AttributeDefinitions=[{"AttributeName": "projectId", "AttributeType": "S"}],
             BillingMode="PAY_PER_REQUEST",
         )
 
@@ -80,9 +83,11 @@ def dynamodb_tables(aws_env):
 @pytest.fixture
 async def client(dynamodb_tables):
     from app.services.dynamodb import get_dynamodb_resource
+
     get_dynamodb_resource.cache_clear()
 
     from app.main import app
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -91,13 +96,9 @@ async def client(dynamodb_tables):
 
 def make_bedrock_response(content: dict) -> MagicMock:
     """Create a mock Bedrock response object."""
-    body_content = json.dumps({
-        "output": {
-            "message": {
-                "content": [{"text": json.dumps(content)}]
-            }
-        }
-    }).encode()
+    body_content = json.dumps(
+        {"output": {"message": {"content": [{"text": json.dumps(content)}]}}}
+    ).encode()
 
     mock_body = MagicMock()
     mock_body.read.return_value = body_content
@@ -109,32 +110,44 @@ def make_bedrock_response(content: dict) -> MagicMock:
 async def test_prioritize_success(client):
     """Test successful prioritization with mocked Bedrock."""
     # Create project
-    r = await client.post("/api/projects", json={
-        "name": "Test Project",
-        "objective": "Build MVP",
-        "deadline": "2025-12-31",
-    })
+    r = await client.post(
+        "/api/projects",
+        json={
+            "name": "Test Project",
+            "objective": "Build MVP",
+            "deadline": "2025-12-31",
+        },
+    )
     project_id = r.json()["projectId"]
 
     # Create tasks
-    r1 = await client.post(f"/api/projects/{project_id}/tasks", json={
-        "title": "Design database schema",
-        "description": "Define DynamoDB table structures",
-    })
+    r1 = await client.post(
+        f"/api/projects/{project_id}/tasks",
+        json={
+            "title": "Design database schema",
+            "description": "Define DynamoDB table structures",
+        },
+    )
     task1_id = r1.json()["taskId"]
 
-    r2 = await client.post(f"/api/projects/{project_id}/tasks", json={
-        "title": "Write API endpoints",
-        "description": "Implement CRUD operations",
-    })
+    r2 = await client.post(
+        f"/api/projects/{project_id}/tasks",
+        json={
+            "title": "Write API endpoints",
+            "description": "Implement CRUD operations",
+        },
+    )
     task2_id = r2.json()["taskId"]
 
     # Prepare mock response with real task IDs
     mock_response = MOCK_BEDROCK_RESPONSE.copy()
     mock_response["recommendations"] = [
         {**mock_response["recommendations"][0], "taskId": task1_id},
-        {**mock_response["recommendations"][1], "taskId": task2_id,
-         "dependencies": [task1_id]},
+        {
+            **mock_response["recommendations"][1],
+            "taskId": task2_id,
+            "dependencies": [task1_id],
+        },
     ]
 
     # Mock Bedrock call
@@ -145,6 +158,7 @@ async def test_prioritize_success(client):
 
         # Clear cache so mock is used
         from app.services.bedrock import get_bedrock_client
+
         get_bedrock_client.cache_clear()
 
         r = await client.post(f"/api/projects/{project_id}/prioritize")

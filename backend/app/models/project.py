@@ -1,9 +1,6 @@
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
 from fastapi import HTTPException
 
 from app.schemas.project import ProjectCreate, ProjectUpdate
@@ -13,7 +10,7 @@ from app.services.dynamodb import get_projects_table
 def create_project(data: ProjectCreate) -> dict:
     """Create a new project in DynamoDB."""
     table = get_projects_table()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     item = {
         "projectId": str(uuid.uuid4()),
@@ -59,7 +56,7 @@ def update_project(project_id: str, data: ProjectUpdate) -> dict:
     get_project(project_id)
 
     table = get_projects_table()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     update_fields = data.model_dump(exclude_unset=True)
     if not update_fields:

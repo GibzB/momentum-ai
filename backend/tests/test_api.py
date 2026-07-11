@@ -28,9 +28,7 @@ def dynamodb_tables(aws_env):
         dynamodb.create_table(
             TableName=settings.dynamodb_table_projects,
             KeySchema=[{"AttributeName": "projectId", "KeyType": "HASH"}],
-            AttributeDefinitions=[
-                {"AttributeName": "projectId", "AttributeType": "S"}
-            ],
+            AttributeDefinitions=[{"AttributeName": "projectId", "AttributeType": "S"}],
             BillingMode="PAY_PER_REQUEST",
         )
 
@@ -56,9 +54,11 @@ async def client(dynamodb_tables):
     """Async HTTP client for testing."""
     # Clear LRU cache so moto table is used
     from app.services.dynamodb import get_dynamodb_resource
+
     get_dynamodb_resource.cache_clear()
 
     from app.main import app
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -75,12 +75,15 @@ async def test_health(client):
 @pytest.mark.asyncio
 async def test_project_crud(client):
     # Create
-    r = await client.post("/api/projects", json={
-        "name": "Test Project",
-        "description": "A test project",
-        "deadline": "2025-12-31",
-        "objective": "Ship MVP",
-    })
+    r = await client.post(
+        "/api/projects",
+        json={
+            "name": "Test Project",
+            "description": "A test project",
+            "deadline": "2025-12-31",
+            "objective": "Ship MVP",
+        },
+    )
     assert r.status_code == 201
     project = r.json()
     project_id = project["projectId"]
@@ -118,11 +121,14 @@ async def test_task_crud(client):
     project_id = r.json()["projectId"]
 
     # Create task
-    r = await client.post(f"/api/projects/{project_id}/tasks", json={
-        "title": "Build feature",
-        "description": "Implement the thing",
-        "deadline": "2025-06-15",
-    })
+    r = await client.post(
+        f"/api/projects/{project_id}/tasks",
+        json={
+            "title": "Build feature",
+            "description": "Implement the thing",
+            "deadline": "2025-06-15",
+        },
+    )
     assert r.status_code == 201
     task = r.json()
     task_id = task["taskId"]

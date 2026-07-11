@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
 from app.core.config import settings
-from app.routers import projects, tasks, prioritize
+from app.routers import prioritize, projects, tasks
 
 app = FastAPI(
     title=settings.app_name,

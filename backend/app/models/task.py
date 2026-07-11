@@ -1,6 +1,5 @@
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from boto3.dynamodb.conditions import Key
 from fastapi import HTTPException
@@ -12,7 +11,7 @@ from app.services.dynamodb import get_tasks_table
 def create_task(project_id: str, data: TaskCreate) -> dict:
     """Create a new task within a project."""
     table = get_tasks_table()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     item = {
         "taskId": str(uuid.uuid4()),
@@ -36,9 +35,7 @@ def get_task(project_id: str, task_id: str) -> dict:
     """Get a single task by project ID and task ID."""
     table = get_tasks_table()
 
-    response = table.get_item(
-        Key={"projectId": project_id, "taskId": task_id}
-    )
+    response = table.get_item(Key={"projectId": project_id, "taskId": task_id})
     item = response.get("Item")
 
     if not item:
@@ -51,9 +48,7 @@ def list_tasks(project_id: str) -> list[dict]:
     """List all tasks for a project."""
     table = get_tasks_table()
 
-    response = table.query(
-        KeyConditionExpression=Key("projectId").eq(project_id)
-    )
+    response = table.query(KeyConditionExpression=Key("projectId").eq(project_id))
     return response.get("Items", [])
 
 
@@ -63,7 +58,7 @@ def update_task(project_id: str, task_id: str, data: TaskUpdate) -> dict:
     get_task(project_id, task_id)
 
     table = get_tasks_table()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     update_fields = data.model_dump(exclude_unset=True)
     if not update_fields:
