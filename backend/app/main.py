@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
 from app.core.config import settings
-from app.routers import projects, tasks
+from app.routers import projects, tasks, prioritize
 
 app = FastAPI(
     title=settings.app_name,
@@ -31,6 +31,7 @@ async def health_check():
 # Register routers
 app.include_router(projects.router)
 app.include_router(tasks.router)
+app.include_router(prioritize.router)
 
 
 # Lambda handler via Mangum
