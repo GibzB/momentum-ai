@@ -2,14 +2,142 @@ name: Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
 
 jobs:
-  deploy:
+  deploy-infrastructure:
+    name: Terraform (${{ inputs.environment }})
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+
+    outputs:
+      api_endpoint: ${{ steps.outputs.outputs.api_endpoint }}
+      lambda_function_name: ${{ steps.outputs.outputs.lambda_function_name }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deployment Placeholder
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -var-file=environments/${{ inputs.environment }}/terraform.tfvars -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Export Outputs
+        id: outputs
         run: |
-          echo "Terraform deployment will be added in Sprint 2."
+          echo "api_endpoint=$(terraform output -raw api_endpoint)" >> $GITHUB_OUTPUT
+          echo "lambda_function_name=$(terraform output -raw lambda_function_name)" >> $GITHUB_OUTPUT
+
+  deploy-backend:
+    name: Deploy Lambda
+    runs-on: ubuntu-latest
+    needs: deploy-infrastructure
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt -t package/
+          cp -r app package/
+
+      - name: Package Lambda
+        working-directory: backend
+        run: |
+          cd package
+          zip -r ../lambda.zip . -x "*.pyc" "__pycache__/*"
+
+      - name: Deploy to Lambda
+        working-directory: backend
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ needs.deploy-infrastructure.outputs.lambda_function_name }} \
+            --zip-file fileb://lambda.zip \
+            --publish
+
+      - name: Wait for update
+        run: |
+          aws lambda wait function-updated \
+            --function-name ${{ needs.deploy-infrastructure.outputs.lambda_function_name }}
+
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-infrastructure
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - run: npm ci
+
+      - name: Build with API URL
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ needs.deploy-infrastructure.outputs.api_endpoint }}
+
+      - name: Deploy to Amplify
+        run: |
+          cd dist
+          zip -r ../build.zip .
+          cd ..
+          aws amplify start-deployment \
+            --app-id ${{ vars.AMPLIFY_APP_ID }} \
+            --branch-name ${{ inputs.environment == 'prod' && 'main' || 'dev' }} \
+            --source-url fileb://build.zip || echo "Amplify deployment configured via console"

@@ -50,3 +50,13 @@ module "monitoring" {
   environment          = var.environment
   lambda_function_name = module.lambda.function_name
 }
+
+# --- Amplify Frontend ---
+module "amplify" {
+  source = "./modules/amplify"
+
+  project_name   = var.project_name
+  environment    = var.environment
+  repository_url = var.repository_url
+  api_endpoint   = module.api_gateway.api_endpoint
+}

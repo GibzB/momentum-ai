@@ -17,3 +17,13 @@ output "tasks_table_name" {
   description = "DynamoDB tasks table name"
   value       = module.dynamodb.tasks_table_name
 }
+
+output "amplify_app_id" {
+  description = "Amplify application ID"
+  value       = module.amplify.app_id
+}
+
+output "amplify_url" {
+  description = "Amplify frontend URL"
+  value       = module.amplify.branch_url
+}

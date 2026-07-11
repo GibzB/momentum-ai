@@ -38,3 +38,9 @@ variable "bedrock_model_id" {
   type        = string
   default     = "amazon.nova-lite-v1:0"
 }
+
+variable "repository_url" {
+  description = "GitHub repository URL for Amplify"
+  type        = string
+  default     = "https://github.com/GibzB/momentum-ai"
+}
