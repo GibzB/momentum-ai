@@ -21,9 +21,11 @@ coverage/
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+!environments/*/terraform.tfvars
+*.zip
 
 # Logs
 *.log
 
 # Testing
-.pytest_cache/
+.pytest_cache/backend/momentum_backend.egg-info/
