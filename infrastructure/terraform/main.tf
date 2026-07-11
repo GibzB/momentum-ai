@@ -55,8 +55,17 @@ module "monitoring" {
 module "amplify" {
   source = "./modules/amplify"
 
-  project_name   = var.project_name
-  environment    = var.environment
-  repository_url = var.repository_url
-  api_endpoint   = module.api_gateway.api_endpoint
+  project_name = var.project_name
+  environment  = var.environment
+  api_endpoint = module.api_gateway.api_endpoint
+}
+
+# --- GitHub OIDC (CI/CD) ---
+module "github_oidc" {
+  source = "./modules/github_oidc"
+
+  project_name = var.project_name
+  environment  = var.environment
+  aws_region   = var.aws_region
+  github_repo  = var.github_repo
 }

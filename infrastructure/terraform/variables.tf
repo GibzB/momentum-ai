@@ -44,3 +44,9 @@ variable "repository_url" {
   type        = string
   default     = "https://github.com/GibzB/momentum-ai"
 }
+
+variable "github_repo" {
+  description = "GitHub repo in owner/repo format for OIDC"
+  type        = string
+  default     = "GibzB/momentum-ai"
+}

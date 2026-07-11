@@ -26,7 +26,7 @@ echo "✅ Infrastructure deployed. API: $API_ENDPOINT"
 echo "📦 Packaging backend..."
 cd ../../backend
 rm -rf package lambda.zip
-pip install -r requirements.txt -t package/ --quiet
+pip install -r requirements.txt -t package/ --platform manylinux2014_aarch64 --only-binary=:all: --quiet
 cp -r app package/
 cd package
 zip -r ../lambda.zip . -x "*.pyc" "__pycache__/*" > /dev/null

@@ -1,6 +1,6 @@
 resource "aws_amplify_app" "frontend" {
-  name       = "${var.project_name}-${var.environment}"
-  repository = var.repository_url
+  name     = "${var.project_name}-${var.environment}"
+  platform = "WEB"
 
   build_spec = <<-EOT
     version: 1

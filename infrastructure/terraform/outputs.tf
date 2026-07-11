@@ -27,3 +27,8 @@ output "amplify_url" {
   description = "Amplify frontend URL"
   value       = module.amplify.branch_url
 }
+
+output "deploy_role_arn" {
+  description = "GitHub Actions deploy role ARN (set as AWS_DEPLOY_ROLE_ARN in GitHub)"
+  value       = module.github_oidc.deploy_role_arn
+}
