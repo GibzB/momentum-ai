@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
 from app.core.config import settings
+from app.routers import projects, tasks
 
 app = FastAPI(
     title=settings.app_name,
@@ -25,6 +26,11 @@ app.add_middleware(
 async def health_check():
     """Health check endpoint for load balancers and monitoring."""
     return {"status": "healthy", "service": settings.app_name, "version": "0.1.0"}
+
+
+# Register routers
+app.include_router(projects.router)
+app.include_router(tasks.router)
 
 
 # Lambda handler via Mangum
