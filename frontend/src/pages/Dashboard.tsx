@@ -1,22 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   CalendarClock,
   FolderKanban,
   ListTodo,
-  Loader2,
   Plus,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useAllTasks, useProjects } from "@/hooks/use-api";
 import { prioritizeApi } from "@/lib/api";
 import type { PrioritizationResponse, PrioritizedTask, Task } from "@/types";
 
-// Project colour palette — distinct, accessible on dark bg
 const PROJECT_COLORS = [
   "bg-blue-500/20 text-blue-400 border-blue-500/30",
   "bg-purple-500/20 text-purple-400 border-purple-500/30",
@@ -76,8 +72,14 @@ interface TaskWithMeta {
 
 export function Dashboard() {
   const { data: projectsData, isLoading: projectsLoading } = useProjects();
-  const projects = useMemo(() => projectsData?.projects ?? [], [projectsData]);
-  const projectIds = useMemo(() => projects.map((p) => p.projectId), [projects]);
+  const projects = useMemo(
+    () => projectsData?.projects ?? [],
+    [projectsData]
+  );
+  const projectIds = useMemo(
+    () => projects.map((p) => p.projectId),
+    [projects]
+  );
 
   const taskQueries = useAllTasks(projectIds);
   const tasksLoading = taskQueries.some((q) => q.isLoading);
@@ -85,9 +87,9 @@ export function Dashboard() {
   const [prioritizations, setPrioritizations] = useState<
     Record<string, PrioritizationResponse>
   >({});
-  const [isPrioritizing, setIsPrioritizing] = useState(false);
+  const hasFetchedRef = useRef(false);
 
-  // Build colour map for projects
+  // Build colour map
   const projectColorMap = useMemo(() => {
     const map: Record<string, string> = {};
     projects.forEach((p, i) => {
@@ -96,7 +98,7 @@ export function Dashboard() {
     return map;
   }, [projects]);
 
-  // Flatten all tasks with project metadata
+  // Flatten all active tasks
   const allTasks: TaskWithMeta[] = useMemo(() => {
     const result: TaskWithMeta[] = [];
     taskQueries.forEach((q, i) => {
@@ -111,7 +113,8 @@ export function Dashboard() {
         result.push({
           task,
           projectName: project.name,
-          projectColor: projectColorMap[project.projectId] ?? PROJECT_COLORS[0],
+          projectColor:
+            projectColorMap[project.projectId] ?? PROJECT_COLORS[0],
           priority: pri,
         });
       });
@@ -119,7 +122,33 @@ export function Dashboard() {
     return result;
   }, [taskQueries, projects, prioritizations, projectColorMap]);
 
-  // Tasks approaching deadline (within 3 days)
+  // Auto-prioritize once tasks are loaded
+  useEffect(() => {
+    if (hasFetchedRef.current) return;
+    if (tasksLoading || allTasks.length === 0 || projects.length === 0) return;
+
+    hasFetchedRef.current = true;
+    (async () => {
+      const results: Record<string, PrioritizationResponse> = {};
+      for (const project of projects) {
+        const hasTasks = allTasks.some(
+          (t) => t.task.projectId === project.projectId
+        );
+        if (!hasTasks) continue;
+        try {
+          const res = await prioritizeApi.run(project.projectId);
+          results[project.projectId] = res;
+        } catch {
+          // Use heuristic fallback
+        }
+      }
+      if (Object.keys(results).length > 0) {
+        setPrioritizations(results);
+      }
+    })();
+  }, [tasksLoading, allTasks, projects]);
+
+  // Tasks due within 3 days
   const urgentTasks = useMemo(() => {
     return allTasks
       .filter((t) => {
@@ -127,10 +156,13 @@ export function Dashboard() {
         const days = getDaysUntil(t.task.deadline);
         return days >= 0 && days <= 3;
       })
-      .sort((a, b) => getDaysUntil(a.task.deadline!) - getDaysUntil(b.task.deadline!));
+      .sort(
+        (a, b) =>
+          getDaysUntil(a.task.deadline!) - getDaysUntil(b.task.deadline!)
+      );
   }, [allTasks]);
 
-  // Group by quadrant
+  // Group into quadrants — only tasks with AI prioritization
   const quadrants = useMemo(() => {
     const grouped: Record<QuadrantKey, TaskWithMeta[]> = {
       "urgent-important": [],
@@ -143,80 +175,63 @@ export function Dashboard() {
         grouped[t.priority.quadrant as QuadrantKey].push(t);
       }
     });
-    // Sort each quadrant by priority score desc
     Object.values(grouped).forEach((arr) =>
-      arr.sort((a, b) => (b.priority?.priorityScore ?? 0) - (a.priority?.priorityScore ?? 0))
+      arr.sort(
+        (a, b) =>
+          (b.priority?.priorityScore ?? 0) -
+          (a.priority?.priorityScore ?? 0)
+      )
     );
     return grouped;
   }, [allTasks]);
 
-  const hasPrioritizations = Object.keys(prioritizations).length > 0;
   const totalActiveTasks = allTasks.length;
-
-  // Prioritize all projects
-  const handlePrioritizeAll = async () => {
-    setIsPrioritizing(true);
-    const results: Record<string, PrioritizationResponse> = {};
-    for (const project of projects) {
-      const projectTasks = allTasks.filter(
-        (t) => t.task.projectId === project.projectId
-      );
-      if (projectTasks.length === 0) continue;
-      try {
-        const res = await prioritizeApi.run(project.projectId);
-        results[project.projectId] = res;
-      } catch {
-        // Skip projects that fail
-      }
-    }
-    setPrioritizations(results);
-    setIsPrioritizing(false);
-  };
 
   return (
     <div className="space-y-6">
-      {/* Deadline Banner */}
+      {/* Scrolling Deadline Banner */}
       {urgentTasks.length > 0 && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <span className="text-sm font-medium text-amber-400">
-              Tasks Due Soon
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-amber-500/20">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span className="text-xs font-medium text-amber-400">
+              Due Soon
             </span>
           </div>
-          <div className="space-y-1.5">
-            {urgentTasks.map((t) => {
-              const days = getDaysUntil(t.task.deadline!);
-              const urgencyText =
-                days === 0
-                  ? "Due today"
-                  : days === 1
-                    ? "Due tomorrow"
-                    : `Due in ${days} days`;
-              return (
-                <div
-                  key={t.task.taskId}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block h-2 w-2 rounded-full ${t.projectColor.split(" ")[0]}`}
-                    />
-                    <span className="text-foreground">{t.task.title}</span>
-                    <span className="text-muted-foreground">
-                      · {t.projectName}
-                    </span>
-                  </div>
-                  <Badge
-                    variant={days === 0 ? "destructive" : "warning"}
-                    className="text-xs"
+          <div className="relative overflow-hidden py-2.5 px-4">
+            <div className="animate-marquee flex gap-8 whitespace-nowrap">
+              {[...urgentTasks, ...urgentTasks].map((t, idx) => {
+                const days = getDaysUntil(t.task.deadline!);
+                const urgencyText =
+                  days === 0
+                    ? "TODAY"
+                    : days === 1
+                      ? "TOMORROW"
+                      : `${days}d left`;
+                return (
+                  <span
+                    key={`${t.task.taskId}-${idx}`}
+                    className="inline-flex items-center gap-2 text-sm"
                   >
-                    <CalendarClock className="h-3 w-3 mr-1" />
-                    {urgencyText}
-                  </Badge>
-                </div>
-              );
-            })}
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full shrink-0 ${t.projectColor.split(" ")[0]}`}
+                    />
+                    <span className="text-foreground font-medium">
+                      {t.task.title}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t.projectName}
+                    </span>
+                    <span
+                      className={`text-xs font-semibold ${days === 0 ? "text-red-400" : "text-amber-400"}`}
+                    >
+                      <CalendarClock className="inline h-3 w-3 mr-0.5" />
+                      {urgencyText}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -229,25 +244,12 @@ export function Dashboard() {
             Turn priorities into progress.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link to="/projects/new">
-              <Plus className="h-4 w-4" />
-              New Project
-            </Link>
-          </Button>
-          <Button
-            onClick={handlePrioritizeAll}
-            disabled={isPrioritizing || totalActiveTasks === 0}
-          >
-            {isPrioritizing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            Prioritize All
-          </Button>
-        </div>
+        <Button asChild variant="outline">
+          <Link to="/projects/new">
+            <Plus className="h-4 w-4" />
+            New Project
+          </Link>
+        </Button>
       </div>
 
       {/* Stats */}
@@ -277,7 +279,9 @@ export function Dashboard() {
             <div className="text-2xl font-bold">
               {tasksLoading ? "—" : totalActiveTasks}
             </div>
-            <p className="text-xs text-muted-foreground">across all projects</p>
+            <p className="text-xs text-muted-foreground">
+              across all projects
+            </p>
           </CardContent>
         </Card>
 
@@ -295,81 +299,71 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Eisenhower Matrix */}
-      {hasPrioritizations ? (
-        <div className="space-y-3">
-          <h2 className="text-lg font-medium">Eisenhower Matrix</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {(
-              [
-                "urgent-important",
-                "not-urgent-important",
-                "urgent-not-important",
-                "not-urgent-not-important",
-              ] as QuadrantKey[]
-            ).map((key) => {
-              const meta = QUADRANT_META[key];
-              const items = quadrants[key];
-              return (
-                <Card
-                  key={key}
-                  className={`border ${meta.className} min-h-[140px]`}
-                >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      {meta.label}
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        {meta.description}
+      {/* Eisenhower Matrix — Always Visible */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-medium">Eisenhower Matrix</h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {(
+            [
+              "urgent-important",
+              "not-urgent-important",
+              "urgent-not-important",
+              "not-urgent-not-important",
+            ] as QuadrantKey[]
+          ).map((key) => {
+            const meta = QUADRANT_META[key];
+            const items = quadrants[key];
+            return (
+              <Card
+                key={key}
+                className={`border ${meta.className} min-h-[160px]`}
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {meta.label}
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      {meta.description}
+                    </span>
+                    {items.length > 0 && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        ({items.length})
                       </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-1.5">
-                    {items.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic">
-                        No tasks in this quadrant
-                      </p>
-                    ) : (
-                      items.map((t) => (
-                        <div
-                          key={t.task.taskId}
-                          className="flex items-center gap-2 text-sm"
-                        >
-                          <span
-                            className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs ${t.projectColor}`}
-                          >
-                            {t.projectName}
-                          </span>
-                          <span className="text-foreground truncate">
-                            {t.task.title}
-                          </span>
-                          {t.priority && (
-                            <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
-                              {t.priority.priorityScore}
-                            </span>
-                          )}
-                        </div>
-                      ))
                     )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1.5">
+                  {items.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic py-4 text-center">
+                      No tasks
+                    </p>
+                  ) : (
+                    items.map((t) => (
+                      <div
+                        key={t.task.taskId}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <span
+                          className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs shrink-0 ${t.projectColor}`}
+                        >
+                          {t.projectName}
+                        </span>
+                        <span className="text-foreground truncate">
+                          {t.task.title}
+                        </span>
+                        {t.priority && (
+                          <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
+                            {t.priority.priorityScore}
+                          </span>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
-      ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Sparkles className="h-10 w-10 text-muted-foreground/40" />
-            <p className="mt-4 text-lg font-medium text-muted-foreground">
-              Eisenhower Matrix
-            </p>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Click "Prioritize All" to have M1 analyze your tasks and place
-              them in the matrix.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      </div>
 
       {/* Project Legend */}
       {projects.length > 0 && (
