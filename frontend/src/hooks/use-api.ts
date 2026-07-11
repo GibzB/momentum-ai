@@ -1,6 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { prioritizeApi, projectsApi, tasksApi } from "@/lib/api";
-import type { ProjectCreate, ProjectUpdate, TaskCreate, TaskUpdate } from "@/types";
+import type {
+  ProjectCreate,
+  ProjectUpdate,
+  TaskCreate,
+  TaskUpdate,
+} from "@/types";
 
 // --- Projects ---
 
@@ -88,5 +93,17 @@ export function usePrioritize(projectId: string) {
   return useMutation({
     mutationFn: () => prioritizeApi.run(projectId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
+  });
+}
+
+// --- All Tasks (across projects) ---
+
+export function useAllTasks(projectIds: string[]) {
+  return useQueries({
+    queries: projectIds.map((id) => ({
+      queryKey: ["tasks", id],
+      queryFn: () => tasksApi.list(id),
+      enabled: !!id,
+    })),
   });
 }
