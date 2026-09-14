@@ -3,6 +3,11 @@
 Triggered on a schedule (EventBridge -> Lambda). For every project with active
 tasks it re-runs the M1 agent, stores the fresh recommendation, and publishes an
 SNS notification ONLY when the agent decides a human needs to weigh in.
+
+Alert state lives in `project.lastAlert` and is claimed with a conditional
+DynamoDB update before publishing, so concurrent sweeps cannot double-send and a
+failed publish is retried on the next sweep (the claim is only marked delivered
+after SNS accepts the message).
 """
 
 import logging
@@ -12,7 +17,13 @@ import boto3
 
 from app.agent.m1 import run_m1
 from app.core.config import settings
-from app.models.project import list_projects, save_recommendation
+from app.models.project import (
+    claim_alert,
+    clear_alert,
+    list_projects,
+    mark_alert_delivered,
+    save_recommendation,
+)
 from app.models.task import list_tasks
 from app.schemas.prioritization import PrioritizationResponse
 
@@ -20,11 +31,11 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def notify(project: dict, response: PrioritizationResponse) -> None:
-    """Send a human-facing alert for a project that needs attention."""
+def notify(project: dict, response: PrioritizationResponse) -> bool:
+    """Send a human-facing alert. Returns True once SNS accepted the message."""
     if not settings.alerts_topic_arn:
         logger.warning("ALERTS_TOPIC_ARN not set; skipping notification")
-        return
+        return False
 
     top = response.recommendations[:3]
     lines = [
@@ -40,15 +51,22 @@ def notify(project: dict, response: PrioritizationResponse) -> None:
         Subject=f"[Momentum] {project.get('name')} needs your attention",
         Message="\n".join(lines),
     )
+    return True
 
 
-def should_alert(previous: dict | None, response: PrioritizationResponse) -> bool:
-    """Alert only when a project newly becomes at-risk or the reason changes."""
+def maybe_alert(project: dict, response: PrioritizationResponse) -> bool:
+    """Alert once per distinct attention reason; retry until delivered."""
+    project_id = project["projectId"]
     if not response.needsHumanAttention:
+        clear_alert(project_id)
         return False
-    if not previous or not previous.get("needsHumanAttention"):
+    reason = response.attentionReason or response.summary
+    if not claim_alert(project_id, reason):
+        return False
+    if notify(project, response):
+        mark_alert_delivered(project_id, reason)
         return True
-    return previous.get("attentionReason") != response.attentionReason
+    return False
 
 
 def watch_project(project: dict) -> tuple[PrioritizationResponse, bool] | None:
@@ -74,10 +92,7 @@ def watch_project(project: dict) -> tuple[PrioritizationResponse, bool] | None:
         logger.info("project=%s deleted during sweep; skipping", project_id)
         return None
 
-    alert = should_alert(project.get("lastRecommendation"), response)
-    if alert:
-        notify(project, response)
-    return response, alert
+    return response, maybe_alert(project, response)
 
 
 def run_watch() -> dict:

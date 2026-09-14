@@ -52,6 +52,12 @@ aws lambda invoke --function-name momentum-watcher-dev /dev/stdout
 GitHub OIDC role. Set repository variables `AWS_DEPLOY_ROLE_ARN` (from
 `terraform output deploy_role_arn`) and `AMPLIFY_APP_ID`.
 
+The role trusts only tokens whose subject is
+`repo:<owner>/<repo>:environment:<environment>`, so create a GitHub Environment
+named `dev` / `prod` (Settings → Environments) matching the Terraform
+`environment` variable. Workflows on pull requests or arbitrary branches cannot
+assume the role.
+
 ## Running M1 on Amazon Bedrock AgentCore Runtime (optional)
 
 The agent is plain Strands code, so it can also be hosted on AgentCore Runtime:

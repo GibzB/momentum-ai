@@ -59,24 +59,80 @@ def list_projects() -> list[dict]:
         kwargs["ExclusiveStartKey"] = last_key
 
 
-def save_recommendation(project_id: str, recommendation: dict) -> bool:
-    """Persist the latest M1 recommendation on the project item.
-
-    Returns False if the project no longer exists (never recreates it).
-    """
-    table = get_projects_table()
+def _conditional_update(project_id: str, **kwargs) -> bool:
+    """Run an UpdateItem that must never create the item. False if condition failed."""
     try:
-        table.update_item(
-            Key={"projectId": project_id},
-            UpdateExpression="SET lastRecommendation = :r",
-            ConditionExpression="attribute_exists(projectId)",
-            ExpressionAttributeValues={":r": _to_dynamo(recommendation)},
-        )
+        get_projects_table().update_item(Key={"projectId": project_id}, **kwargs)
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
             return False
         raise
     return True
+
+
+def save_recommendation(project_id: str, recommendation: dict) -> bool:
+    """Persist the latest M1 recommendation on the project item.
+
+    Returns False if the project no longer exists (never recreates it).
+    """
+    return _conditional_update(
+        project_id,
+        UpdateExpression="SET lastRecommendation = :r",
+        ConditionExpression="attribute_exists(projectId)",
+        ExpressionAttributeValues={":r": _to_dynamo(recommendation)},
+    )
+
+
+def claim_alert(project_id: str, reason: str) -> bool:
+    """Atomically claim the right to send an alert for `reason`.
+
+    Succeeds when no alert for this reason has been claimed yet, or when a
+    previous claim was never marked delivered (so failed sends are retried).
+    Concurrent sweeps race on this update and only one wins.
+    """
+    return _conditional_update(
+        project_id,
+        UpdateExpression="SET lastAlert = :a",
+        ConditionExpression=(
+            "attribute_exists(projectId) AND ("
+            "attribute_not_exists(lastAlert) OR lastAlert.reason <> :r "
+            "OR lastAlert.delivered = :f)"
+        ),
+        ExpressionAttributeValues={
+            ":a": {
+                "reason": reason,
+                "delivered": False,
+                "claimedAt": datetime.now(UTC).isoformat(),
+            },
+            ":r": reason,
+            ":f": False,
+        },
+    )
+
+
+def mark_alert_delivered(project_id: str, reason: str) -> bool:
+    """Record that the alert for `reason` reached the notification channel."""
+    return _conditional_update(
+        project_id,
+        UpdateExpression="SET lastAlert.delivered = :t, lastAlert.sentAt = :now",
+        ConditionExpression="attribute_exists(projectId) AND lastAlert.reason = :r",
+        ExpressionAttributeValues={
+            ":t": True,
+            ":now": datetime.now(UTC).isoformat(),
+            ":r": reason,
+        },
+    )
+
+
+def clear_alert(project_id: str) -> None:
+    """Forget the alert state once the project is healthy again."""
+    _conditional_update(
+        project_id,
+        UpdateExpression="REMOVE lastAlert",
+        ConditionExpression=(
+            "attribute_exists(projectId) AND attribute_exists(lastAlert)"
+        ),
+    )
 
 
 def _to_dynamo(value):

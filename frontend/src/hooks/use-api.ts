@@ -93,6 +93,8 @@ export function useLatestRecommendation(projectId: string) {
     queryKey: ["recommendation", projectId],
     queryFn: () => prioritizeApi.latest(projectId),
     enabled: !!projectId,
+    // The background watcher writes directly to DynamoDB; poll so open tabs see it.
+    refetchInterval: 60_000,
   });
 }
 
