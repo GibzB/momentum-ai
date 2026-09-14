@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from strands import Agent
 from strands.models import BedrockModel
 
-from app.agent.tools import days_until, eisenhower_quadrant, get_project_tasks
+from app.agent.tools import days_until, eisenhower_quadrant, make_get_project_tasks
 from app.core.config import settings
 from app.schemas.prioritization import PrioritizedTask
 
@@ -101,8 +101,8 @@ COMPLETED TASKS ({len(completed_tasks)}):
     return prompt
 
 
-def create_m1_agent() -> Agent:
-    """Instantiate the M1 Strands agent."""
+def create_m1_agent(project_id: str) -> Agent:
+    """Instantiate the M1 Strands agent scoped to one project."""
     model = BedrockModel(
         model_id=settings.bedrock_model_id,
         region_name=settings.aws_region,
@@ -115,14 +115,14 @@ def create_m1_agent() -> Agent:
         description="Momentum Intelligence — project prioritization agent",
         model=model,
         system_prompt=SYSTEM_PROMPT,
-        tools=[get_project_tasks, days_until, eisenhower_quadrant],
+        tools=[make_get_project_tasks(project_id), days_until, eisenhower_quadrant],
         callback_handler=None,
     )
 
 
 def run_m1(project: dict, tasks: list[dict]) -> M1Output:
     """Run the agent for one project and return validated structured output."""
-    agent = create_m1_agent()
+    agent = create_m1_agent(project["projectId"])
     prompt = build_context_prompt(project, tasks)
     result = agent(prompt, structured_output_model=M1Output)
 

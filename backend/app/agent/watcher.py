@@ -42,8 +42,20 @@ def notify(project: dict, response: PrioritizationResponse) -> None:
     )
 
 
-def watch_project(project: dict) -> PrioritizationResponse | None:
-    """Re-prioritize one project. Returns None when there is nothing to do."""
+def should_alert(previous: dict | None, response: PrioritizationResponse) -> bool:
+    """Alert only when a project newly becomes at-risk or the reason changes."""
+    if not response.needsHumanAttention:
+        return False
+    if not previous or not previous.get("needsHumanAttention"):
+        return True
+    return previous.get("attentionReason") != response.attentionReason
+
+
+def watch_project(project: dict) -> tuple[PrioritizationResponse, bool] | None:
+    """Re-prioritize one project.
+
+    Returns (response, alerted), or None when there is nothing to do.
+    """
     project_id = project["projectId"]
     tasks = list_tasks(project_id)
     if not any(t.get("status") != "completed" for t in tasks):
@@ -58,11 +70,14 @@ def watch_project(project: dict) -> PrioritizationResponse | None:
         attentionReason=output.attentionReason,
         generatedAt=datetime.now(UTC).isoformat(),
     )
-    save_recommendation(project_id, response.model_dump())
+    if not save_recommendation(project_id, response.model_dump()):
+        logger.info("project=%s deleted during sweep; skipping", project_id)
+        return None
 
-    if response.needsHumanAttention:
+    alert = should_alert(project.get("lastRecommendation"), response)
+    if alert:
         notify(project, response)
-    return response
+    return response, alert
 
 
 def run_watch() -> dict:
@@ -78,7 +93,7 @@ def run_watch() -> dict:
         if result is None:
             continue
         checked += 1
-        alerted += int(result.needsHumanAttention)
+        alerted += int(result[1])
 
     summary = {"checked": checked, "alerted": alerted, "failed": failed}
     logger.info("watcher sweep complete %s", summary)

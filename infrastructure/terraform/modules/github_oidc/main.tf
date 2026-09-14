@@ -64,6 +64,8 @@ resource "aws_iam_role_policy" "deploy_permissions" {
           "bedrock:*",
           "s3:*",
           "execute-api:*",
+          "events:*",
+          "sns:*",
         ]
         Resource = "*"
         Condition = {

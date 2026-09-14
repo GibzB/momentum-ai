@@ -1,5 +1,10 @@
 data "aws_caller_identity" "current" {}
 
+locals {
+  # "us.amazon.nova-lite-v1:0" -> "amazon.nova-lite-v1:0"
+  bedrock_base_model_id = replace(var.bedrock_model_id, "/^(us|eu|apac|global)\\./", "")
+}
+
 # Lambda execution role
 resource "aws_iam_role" "lambda_execution" {
   name = "${var.project_name}-lambda-${var.environment}"
@@ -82,10 +87,12 @@ resource "aws_iam_role_policy" "lambda_bedrock" {
           "bedrock:InvokeModel",
           "bedrock:InvokeModelWithResponseStream"
         ]
+        # Only the configured model: its foundation model in any region (cross-region
+        # inference profiles route there) and the matching inference profile.
         Resource = [
-          "arn:aws:bedrock:${var.aws_region}::foundation-model/${var.bedrock_model_id}",
-          "arn:aws:bedrock:*::foundation-model/*",
-          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+          "arn:aws:bedrock:*::foundation-model/${local.bedrock_base_model_id}",
+          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/*.${local.bedrock_base_model_id}",
+          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/${local.bedrock_base_model_id}"
         ]
       }
     ]

@@ -17,18 +17,23 @@ def _parse_date(value: str) -> date | None:
         return None
 
 
-@tool
-def get_project_tasks(project_id: str) -> str:
-    """Fetch every task for a project, including status, description and deadline.
+def make_get_project_tasks(project_id: str):
+    """Build a task-reading tool bound to a single project.
 
-    Args:
-        project_id: The project's UUID.
-
-    Returns:
-        JSON list of tasks. Completed tasks include `completedAt`.
+    The agent cannot pass a project id, so prompt content can never redirect the
+    lookup to another project's data.
     """
-    tasks = list_tasks(project_id)
-    return json.dumps(tasks, default=str)
+
+    @tool
+    def get_project_tasks() -> str:
+        """Fetch every task for the current project: status, description, deadline.
+
+        Returns:
+            JSON list of tasks. Completed tasks include `completedAt`.
+        """
+        return json.dumps(list_tasks(project_id), default=str)
+
+    return get_project_tasks
 
 
 @tool

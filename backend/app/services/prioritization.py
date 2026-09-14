@@ -64,5 +64,6 @@ def prioritize_project(project_id: str) -> PrioritizationResponse:
         attentionReason=output.attentionReason,
         generatedAt=datetime.now(UTC).isoformat(),
     )
-    save_recommendation(project_id, response.model_dump())
+    if not save_recommendation(project_id, response.model_dump()):
+        raise HTTPException(status_code=404, detail="Project not found")
     return response

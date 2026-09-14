@@ -51,7 +51,7 @@ def test_eisenhower_quadrant(days, importance, expected):
 
 
 def test_agent_is_wired_with_tools():
-    agent = create_m1_agent()
+    agent = create_m1_agent("p1")
     names = set(agent.tool_names)
     assert {"get_project_tasks", "days_until", "eisenhower_quadrant"} <= names
     assert agent.name == "M1"
@@ -137,6 +137,47 @@ def test_watcher_skips_quiet_projects_and_alerts_risky_ones(tables):
     assert get_project(quiet["projectId"])["lastRecommendation"]["summary"]
     assert get_project(risky["projectId"])["lastRecommendation"]["needsHumanAttention"]
     assert "lastRecommendation" not in get_project(empty["projectId"])
+
+
+def test_watcher_alerts_only_on_new_risk(tables):
+    from app.models.project import create_project, get_project
+    from app.models.task import create_task
+
+    risky = create_project(ProjectCreate(name="Risky"))
+    rt = create_task(risky["projectId"], TaskCreate(title="Ship it"))
+
+    with (
+        patch.object(watcher, "run_m1", return_value=_output(rt["taskId"], True)),
+        patch.object(watcher, "notify") as mock_notify,
+    ):
+        assert watcher.run_watch()["alerted"] == 1
+        assert watcher.run_watch()["alerted"] == 0  # unchanged risk: stay quiet
+    mock_notify.assert_called_once()
+
+    changed = _output(rt["taskId"], True)
+    changed.attentionReason = "Now two tasks are overdue"
+    with (
+        patch.object(watcher, "run_m1", return_value=changed),
+        patch.object(watcher, "notify") as mock_notify,
+    ):
+        assert watcher.run_watch()["alerted"] == 1
+    assert get_project(risky["projectId"])["lastRecommendation"]["attentionReason"] == (
+        "Now two tasks are overdue"
+    )
+
+
+def test_save_recommendation_never_resurrects_deleted_project(tables):
+    from app.models.project import (
+        create_project,
+        delete_project,
+        list_projects,
+        save_recommendation,
+    )
+
+    p = create_project(ProjectCreate(name="Gone"))
+    delete_project(p["projectId"])
+    assert save_recommendation(p["projectId"], {"summary": "x"}) is False
+    assert list_projects() == []
 
 
 def test_watcher_isolates_failures(tables):

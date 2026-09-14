@@ -22,12 +22,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   useCreateTask,
   useDeleteTask,
+  useLatestRecommendation,
   usePrioritize,
   useProject,
   useTasks,
   useUpdateTask,
 } from "@/hooks/use-api";
-import type { PrioritizationResponse, Task } from "@/types";
+import type { Task } from "@/types";
 
 const taskSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
@@ -61,7 +62,6 @@ export function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const [showAddTask, setShowAddTask] = useState(false);
-  const [prioritization, setPrioritization] = useState<PrioritizationResponse | null>(null);
 
   const { data: project, isLoading: projectLoading } = useProject(projectId!);
   const { data: tasksData, isLoading: tasksLoading } = useTasks(projectId!);
@@ -69,6 +69,7 @@ export function ProjectDetail() {
   const updateTask = useUpdateTask(projectId!);
   const deleteTask = useDeleteTask(projectId!);
   const prioritize = usePrioritize(projectId!);
+  const { data: prioritization } = useLatestRecommendation(projectId!);
 
   const form = useForm<TaskForm>({
     resolver: zodResolver(taskSchema),
@@ -91,10 +92,7 @@ export function ProjectDetail() {
     updateTask.mutate({ taskId: task.taskId, data: { status: newStatus } });
   };
 
-  const handlePrioritize = async () => {
-    const result = await prioritize.mutateAsync();
-    setPrioritization(result);
-  };
+  const handlePrioritize = () => prioritize.mutate();
 
   if (projectLoading) {
     return <div className="py-12 text-center text-muted-foreground">Loading...</div>;
