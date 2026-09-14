@@ -88,11 +88,22 @@ export function useDeleteTask(projectId: string) {
 
 // --- Prioritization ---
 
+export function useLatestRecommendation(projectId: string) {
+  return useQuery({
+    queryKey: ["recommendation", projectId],
+    queryFn: () => prioritizeApi.latest(projectId),
+    enabled: !!projectId,
+  });
+}
+
 export function usePrioritize(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => prioritizeApi.run(projectId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
+    onSuccess: (result) => {
+      qc.setQueryData(["recommendation", projectId], result);
+      qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+    },
   });
 }
 

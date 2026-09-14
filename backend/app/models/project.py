@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from botocore.exceptions import ClientError
 from fastapi import HTTPException
 
 from app.schemas.project import ProjectCreate, ProjectUpdate
@@ -47,18 +48,35 @@ def get_project(project_id: str) -> dict:
 def list_projects() -> list[dict]:
     """List all projects."""
     table = get_projects_table()
-    response = table.scan()
-    return response.get("Items", [])
+    items: list[dict] = []
+    kwargs: dict = {}
+    while True:
+        response = table.scan(**kwargs)
+        items.extend(response.get("Items", []))
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            return items
+        kwargs["ExclusiveStartKey"] = last_key
 
 
-def save_recommendation(project_id: str, recommendation: dict) -> None:
-    """Persist the latest M1 recommendation on the project item."""
+def save_recommendation(project_id: str, recommendation: dict) -> bool:
+    """Persist the latest M1 recommendation on the project item.
+
+    Returns False if the project no longer exists (never recreates it).
+    """
     table = get_projects_table()
-    table.update_item(
-        Key={"projectId": project_id},
-        UpdateExpression="SET lastRecommendation = :r",
-        ExpressionAttributeValues={":r": _to_dynamo(recommendation)},
-    )
+    try:
+        table.update_item(
+            Key={"projectId": project_id},
+            UpdateExpression="SET lastRecommendation = :r",
+            ConditionExpression="attribute_exists(projectId)",
+            ExpressionAttributeValues={":r": _to_dynamo(recommendation)},
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return False
+        raise
+    return True
 
 
 def _to_dynamo(value):

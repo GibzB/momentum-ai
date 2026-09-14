@@ -73,4 +73,10 @@ export const prioritizeApi = {
     request<PrioritizationResponse>(`/api/projects/${projectId}/prioritize`, {
       method: "POST",
     }),
+  latest: async (projectId: string): Promise<PrioritizationResponse | null> => {
+    const res = await fetch(`${API_BASE}/api/projects/${projectId}/recommendations`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
 };

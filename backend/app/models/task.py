@@ -48,8 +48,15 @@ def list_tasks(project_id: str) -> list[dict]:
     """List all tasks for a project."""
     table = get_tasks_table()
 
-    response = table.query(KeyConditionExpression=Key("projectId").eq(project_id))
-    return response.get("Items", [])
+    items: list[dict] = []
+    kwargs: dict = {"KeyConditionExpression": Key("projectId").eq(project_id)}
+    while True:
+        response = table.query(**kwargs)
+        items.extend(response.get("Items", []))
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            return items
+        kwargs["ExclusiveStartKey"] = last_key
 
 
 def update_task(project_id: str, task_id: str, data: TaskUpdate) -> dict:
