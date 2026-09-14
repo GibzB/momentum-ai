@@ -165,7 +165,7 @@ export function ProjectDetail() {
           <CardContent>
             <p className="text-sm text-muted-foreground">{prioritization.summary}</p>
             {prioritization.needsHumanAttention && (
-              <p className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
+              <p className="mt-2 rounded-md bg-destructive p-2 text-sm font-medium text-destructive-foreground">
                 Needs your attention: {prioritization.attentionReason ?? "a deadline is at risk."}
               </p>
             )}
