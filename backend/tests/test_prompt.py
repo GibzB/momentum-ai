@@ -1,6 +1,6 @@
 """Prompt structure validation tests."""
 
-from app.services.prioritization import SYSTEM_PROMPT, build_context_prompt
+from app.agent.m1 import SYSTEM_PROMPT, M1Output, build_context_prompt
 
 
 def test_system_prompt_contains_required_fields():
@@ -29,10 +29,18 @@ def test_system_prompt_contains_quadrants():
         assert q in SYSTEM_PROMPT, f"Missing quadrant {q}"
 
 
-def test_system_prompt_requires_json():
-    """System prompt must instruct JSON-only response."""
-    assert "JSON" in SYSTEM_PROMPT
-    assert "Do NOT include any text outside the JSON" in SYSTEM_PROMPT
+def test_system_prompt_references_tools():
+    """System prompt must steer the agent to its Strands tools."""
+    for tool_name in ("get_project_tasks", "days_until", "eisenhower_quadrant"):
+        assert tool_name in SYSTEM_PROMPT, f"Missing tool {tool_name}"
+
+
+def test_structured_output_schema_has_attention_flag():
+    """Structured output must carry the surface-only-when-needed signal."""
+    fields = M1Output.model_fields
+    assert "recommendations" in fields
+    assert "summary" in fields
+    assert fields["needsHumanAttention"].default is False
 
 
 def test_build_context_prompt_includes_project_info():

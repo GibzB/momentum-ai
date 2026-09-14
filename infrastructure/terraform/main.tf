@@ -40,6 +40,8 @@ module "lambda" {
   tasks_table_name          = module.dynamodb.tasks_table_name
   bedrock_model_id          = var.bedrock_model_id
   api_gateway_execution_arn = module.api_gateway.execution_arn
+  watcher_schedule          = var.watcher_schedule
+  alert_email               = var.alert_email
 }
 
 # --- Monitoring ---

@@ -20,6 +20,7 @@ terraform apply -var-file="environments/${ENVIRONMENT}/terraform.tfvars" -auto-a
 
 API_ENDPOINT=$(terraform output -raw api_endpoint)
 LAMBDA_NAME=$(terraform output -raw lambda_function_name)
+WATCHER_NAME=$(terraform output -raw watcher_function_name)
 echo "✅ Infrastructure deployed. API: $API_ENDPOINT"
 
 # 2. Lambda
@@ -44,7 +45,19 @@ aws lambda wait function-updated \
   --function-name "$LAMBDA_NAME" \
   --region "$REGION" \
   --profile "$PROFILE"
-echo "✅ Lambda deployed."
+
+echo "🚀 Deploying watcher..."
+aws lambda update-function-code \
+  --function-name "$WATCHER_NAME" \
+  --zip-file fileb://lambda.zip \
+  --publish \
+  --region "$REGION" \
+  --profile "$PROFILE" > /dev/null
+aws lambda wait function-updated \
+  --function-name "$WATCHER_NAME" \
+  --region "$REGION" \
+  --profile "$PROFILE"
+echo "✅ Lambda + watcher deployed."
 
 # 3. Frontend
 echo "📦 Building frontend..."
@@ -56,3 +69,4 @@ echo "---"
 echo "🎉 Deployment complete!"
 echo "API: $API_ENDPOINT"
 echo "Lambda: $LAMBDA_NAME"
+echo "Watcher: $WATCHER_NAME"

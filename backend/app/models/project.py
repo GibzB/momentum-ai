@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi import HTTPException
 
@@ -48,6 +49,27 @@ def list_projects() -> list[dict]:
     table = get_projects_table()
     response = table.scan()
     return response.get("Items", [])
+
+
+def save_recommendation(project_id: str, recommendation: dict) -> None:
+    """Persist the latest M1 recommendation on the project item."""
+    table = get_projects_table()
+    table.update_item(
+        Key={"projectId": project_id},
+        UpdateExpression="SET lastRecommendation = :r",
+        ExpressionAttributeValues={":r": _to_dynamo(recommendation)},
+    )
+
+
+def _to_dynamo(value):
+    """DynamoDB rejects floats; store them as Decimal."""
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _to_dynamo(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_dynamo(v) for v in value]
+    return value
 
 
 def update_project(project_id: str, data: ProjectUpdate) -> dict:

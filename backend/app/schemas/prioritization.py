@@ -28,6 +28,10 @@ class PrioritizationResponse(BaseModel):
     projectId: str
     recommendations: list[PrioritizedTask]
     summary: str = Field(..., description="Brief overview of prioritization reasoning")
+    needsHumanAttention: bool = Field(
+        default=False, description="True only when a deadline is overdue or at risk"
+    )
+    attentionReason: str | None = None
     generatedAt: str
 
 

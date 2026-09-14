@@ -31,6 +31,7 @@ jobs:
     outputs:
       api_endpoint: ${{ steps.outputs.outputs.api_endpoint }}
       lambda_function_name: ${{ steps.outputs.outputs.lambda_function_name }}
+      watcher_function_name: ${{ steps.outputs.outputs.watcher_function_name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +59,7 @@ jobs:
         run: |
           echo "api_endpoint=$(terraform output -raw api_endpoint)" >> $GITHUB_OUTPUT
           echo "lambda_function_name=$(terraform output -raw lambda_function_name)" >> $GITHUB_OUTPUT
+          echo "watcher_function_name=$(terraform output -raw watcher_function_name)" >> $GITHUB_OUTPUT
 
   deploy-backend:
     name: Deploy Lambda
@@ -101,6 +103,16 @@ jobs:
         run: |
           aws lambda wait function-updated \
             --function-name ${{ needs.deploy-infrastructure.outputs.lambda_function_name }}
+
+      - name: Deploy watcher (same artifact, different handler)
+        working-directory: backend
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ needs.deploy-infrastructure.outputs.watcher_function_name }} \
+            --zip-file fileb://lambda.zip \
+            --publish
+          aws lambda wait function-updated \
+            --function-name ${{ needs.deploy-infrastructure.outputs.watcher_function_name }}
 
   deploy-frontend:
     name: Deploy Frontend

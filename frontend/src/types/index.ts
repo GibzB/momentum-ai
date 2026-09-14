@@ -49,6 +49,8 @@ export interface PrioritizationResponse {
   projectId: string;
   recommendations: PrioritizedTask[];
   summary: string;
+  needsHumanAttention?: boolean;
+  attentionReason?: string | null;
   generatedAt: string;
 }
 
