@@ -148,11 +148,12 @@ def test_watcher_alerts_only_on_new_risk(tables):
 
     with (
         patch.object(watcher, "run_m1", return_value=_output(rt["taskId"], True)),
-        patch.object(watcher, "notify") as mock_notify,
+        patch.object(watcher, "notify", return_value=True) as mock_notify,
     ):
         assert watcher.run_watch()["alerted"] == 1
         assert watcher.run_watch()["alerted"] == 0  # unchanged risk: stay quiet
     mock_notify.assert_called_once()
+    assert get_project(risky["projectId"])["lastAlert"]["delivered"] is True
 
     changed = _output(rt["taskId"], True)
     changed.attentionReason = "Now two tasks are overdue"
@@ -164,6 +165,49 @@ def test_watcher_alerts_only_on_new_risk(tables):
     assert get_project(risky["projectId"])["lastRecommendation"]["attentionReason"] == (
         "Now two tasks are overdue"
     )
+
+
+def test_watcher_retries_alert_until_delivered(tables):
+    from app.models.project import create_project, get_project
+    from app.models.task import create_task
+
+    risky = create_project(ProjectCreate(name="Risky"))
+    rt = create_task(risky["projectId"], TaskCreate(title="Ship it"))
+    output = _output(rt["taskId"], True)
+
+    with (
+        patch.object(watcher, "run_m1", return_value=output),
+        patch.object(watcher, "notify", side_effect=RuntimeError("sns down")),
+    ):
+        assert watcher.run_watch() == {"checked": 0, "alerted": 0, "failed": 1}
+    assert get_project(risky["projectId"])["lastAlert"]["delivered"] is False
+
+    with (
+        patch.object(watcher, "run_m1", return_value=output),
+        patch.object(watcher, "notify", return_value=True) as mock_notify,
+    ):
+        assert watcher.run_watch()["alerted"] == 1  # same reason, but never delivered
+        assert watcher.run_watch()["alerted"] == 0
+    mock_notify.assert_called_once()
+
+    # Risk resolves -> alert state cleared -> same reason alerts again later
+    with (
+        patch.object(watcher, "run_m1", return_value=_output(rt["taskId"], False)),
+        patch.object(watcher, "notify", return_value=True) as mock_notify,
+    ):
+        assert watcher.run_watch()["alerted"] == 0
+    assert "lastAlert" not in get_project(risky["projectId"])
+
+
+def test_claim_alert_is_exclusive(tables):
+    from app.models.project import claim_alert, create_project, mark_alert_delivered
+
+    p = create_project(ProjectCreate(name="P"))
+    assert claim_alert(p["projectId"], "overdue") is True
+    mark_alert_delivered(p["projectId"], "overdue")
+    assert claim_alert(p["projectId"], "overdue") is False  # racing sweep loses
+    assert claim_alert(p["projectId"], "two overdue") is True
+    assert claim_alert("missing", "overdue") is False
 
 
 def test_save_recommendation_never_resurrects_deleted_project(tables):

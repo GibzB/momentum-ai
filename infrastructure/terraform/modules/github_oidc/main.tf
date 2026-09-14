@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 # GitHub OIDC Provider — allows GitHub Actions to assume IAM roles
 resource "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
@@ -28,9 +30,9 @@ resource "aws_iam_role" "github_deploy" {
         Condition = {
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-          StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*"
+            # Only jobs running in the matching GitHub Environment (deploy.yml sets
+            # `environment:`), so PR / feature-branch workflows cannot assume the role.
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:environment:${var.environment}"
           }
         }
       }
@@ -64,8 +66,6 @@ resource "aws_iam_role_policy" "deploy_permissions" {
           "bedrock:*",
           "s3:*",
           "execute-api:*",
-          "events:*",
-          "sns:*",
         ]
         Resource = "*"
         Condition = {
@@ -73,6 +73,17 @@ resource "aws_iam_role_policy" "deploy_permissions" {
             "aws:RequestedRegion" = var.aws_region
           }
         }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "events:*",
+          "sns:*",
+        ]
+        Resource = [
+          "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.current.account_id}:rule/${var.project_name}-*",
+          "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-*",
+        ]
       },
       {
         Sid    = "GlobalIAM"

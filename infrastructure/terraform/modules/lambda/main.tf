@@ -63,6 +63,9 @@ resource "aws_lambda_function" "watcher" {
   timeout       = var.watcher_timeout
   architectures = ["arm64"]
 
+  # One sweep at a time; alert claims are also atomic in DynamoDB as a backstop.
+  reserved_concurrent_executions = 1
+
   filename         = data.archive_file.placeholder.output_path
   source_code_hash = data.archive_file.placeholder.output_base64sha256
 
