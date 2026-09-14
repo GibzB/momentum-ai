@@ -35,3 +35,20 @@ variable "bedrock_model_id" {
 variable "api_gateway_execution_arn" {
   type = string
 }
+
+variable "watcher_timeout" {
+  type    = number
+  default = 300
+}
+
+variable "watcher_schedule" {
+  description = "EventBridge schedule expression for the background sweep"
+  type        = string
+  default     = "rate(6 hours)"
+}
+
+variable "alert_email" {
+  description = "Email to subscribe to M1 alerts (empty = no subscription)"
+  type        = string
+  default     = ""
+}

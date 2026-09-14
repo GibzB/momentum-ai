@@ -32,3 +32,13 @@ output "deploy_role_arn" {
   description = "GitHub Actions deploy role ARN (set as AWS_DEPLOY_ROLE_ARN in GitHub)"
   value       = module.github_oidc.deploy_role_arn
 }
+
+output "watcher_function_name" {
+  description = "Background watcher Lambda name"
+  value       = module.lambda.watcher_function_name
+}
+
+output "alerts_topic_arn" {
+  description = "SNS topic M1 publishes attention alerts to"
+  value       = module.lambda.alerts_topic_arn
+}

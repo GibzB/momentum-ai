@@ -2,7 +2,7 @@
 
 This document tracks the M1 (Momentum Intelligence) system prompt used for prioritization.
 
-The canonical version lives in `backend/app/services/prioritization.py` as `SYSTEM_PROMPT`.
+The canonical version lives in `backend/app/agent/m1.py` as `SYSTEM_PROMPT`.
 
 ## Overview
 
@@ -10,7 +10,9 @@ M1 analyzes project context and returns structured JSON prioritization:
 
 - **Input:** Project metadata + all tasks (active and completed for context)
 - **Output:** Ranked recommendations with scores, quadrants, explanations
-- **Model:** Amazon Nova Lite (via Bedrock)
+- **Runtime:** Strands Agents SDK `Agent` with tools `get_project_tasks`, `days_until`, `eisenhower_quadrant`
+- **Model:** Amazon Nova Lite (via Bedrock `BedrockModel`)
+- **Output:** enforced with `structured_output_model=M1Output`, no JSON scraping
 - **Temperature:** 0.2 (low variance, consistent rankings)
 
 ## Response Structure

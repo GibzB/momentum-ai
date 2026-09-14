@@ -1,16 +1,16 @@
-"""Tests for M1 prioritization endpoint with mocked Bedrock."""
+"""Tests for M1 prioritization endpoint with a mocked Strands agent."""
 
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import boto3
 import pytest
 from httpx import ASGITransport, AsyncClient
 from moto import mock_aws
 
+from app.agent.m1 import M1Output
 from app.core.config import settings
 
-MOCK_BEDROCK_RESPONSE = {
+MOCK_AGENT_RESPONSE = {
     "recommendations": [
         {
             "taskId": "TASK_ID_PLACEHOLDER",
@@ -94,21 +94,9 @@ async def client(dynamodb_tables):
         yield ac
 
 
-def make_bedrock_response(content: dict) -> MagicMock:
-    """Create a mock Bedrock response object."""
-    body_content = json.dumps(
-        {"output": {"message": {"content": [{"text": json.dumps(content)}]}}}
-    ).encode()
-
-    mock_body = MagicMock()
-    mock_body.read.return_value = body_content
-
-    return {"body": mock_body}
-
-
 @pytest.mark.asyncio
 async def test_prioritize_success(client):
-    """Test successful prioritization with mocked Bedrock."""
+    """Test successful prioritization with a mocked agent run."""
     # Create project
     r = await client.post(
         "/api/projects",
@@ -140,7 +128,7 @@ async def test_prioritize_success(client):
     task2_id = r2.json()["taskId"]
 
     # Prepare mock response with real task IDs
-    mock_response = MOCK_BEDROCK_RESPONSE.copy()
+    mock_response = MOCK_AGENT_RESPONSE.copy()
     mock_response["recommendations"] = [
         {**mock_response["recommendations"][0], "taskId": task1_id},
         {
@@ -150,18 +138,16 @@ async def test_prioritize_success(client):
         },
     ]
 
-    # Mock Bedrock call
-    with patch("app.services.bedrock.get_bedrock_client") as mock_client:
-        mock_bedrock = MagicMock()
-        mock_bedrock.invoke_model.return_value = make_bedrock_response(mock_response)
-        mock_client.return_value = mock_bedrock
-
-        # Clear cache so mock is used
-        from app.services.bedrock import get_bedrock_client
-
-        get_bedrock_client.cache_clear()
-
+    with patch(
+        "app.services.prioritization.run_m1",
+        return_value=M1Output(**mock_response),
+    ) as mock_run:
         r = await client.post(f"/api/projects/{project_id}/prioritize")
+
+    mock_run.assert_called_once()
+    called_project, called_tasks = mock_run.call_args.args
+    assert called_project["projectId"] == project_id
+    assert len(called_tasks) == 2
 
     assert r.status_code == 200
     data = r.json()
@@ -172,6 +158,21 @@ async def test_prioritize_success(client):
     assert data["recommendations"][1]["dependencies"] == [task1_id]
     assert "summary" in data
     assert "generatedAt" in data
+    assert data["needsHumanAttention"] is False
+
+    # Result is persisted so the watcher / UI can read it back
+    r = await client.get(f"/api/projects/{project_id}/recommendations")
+    assert r.status_code == 200
+    assert r.json()["recommendations"][0]["taskId"] == task1_id
+
+
+@pytest.mark.asyncio
+async def test_recommendations_404_before_first_run(client):
+    r = await client.post("/api/projects", json={"name": "Fresh"})
+    project_id = r.json()["projectId"]
+
+    r = await client.get(f"/api/projects/{project_id}/recommendations")
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio

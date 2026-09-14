@@ -50,3 +50,15 @@ variable "github_repo" {
   type        = string
   default     = "GibzB/momentum-ai"
 }
+
+variable "watcher_schedule" {
+  description = "How often the background M1 watcher sweeps projects"
+  type        = string
+  default     = "rate(6 hours)"
+}
+
+variable "alert_email" {
+  description = "Email address that receives M1 attention alerts"
+  type        = string
+  default     = ""
+}
